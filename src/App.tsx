@@ -10,8 +10,11 @@ import { EmergencyMode } from "./components/EmergencyMode";
 import { ProfilePage } from "./components/ProfilePage";
 import { MobileNavigation } from "./components/MobileNavigation";
 import { getAuth, onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
-import { getFirestore, doc, getDoc, updateDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, updateDoc, setDoc } from "firebase/firestore";
 import { app } from "./firebase";
+import blackGif from './components/avatar/black.gif'; // Import black.gif
+import casualGif from './components/avatar/casual.gif'; // Import casual.gif
+import sportsGif from './components/avatar/sports.gif'; // Import sports.gif
 
 interface UserData {
   name: string;
@@ -26,13 +29,15 @@ interface UserData {
   streak: number;
   currentMood: string;
   onboarded: boolean;
+  unlockedOutfits: string[];
+  unlockedAccessories: string[];
 }
 
 export default function App() {
   const auth = getAuth(app);
   const db = getFirestore(app);
-  const [user, setUser] = useState<UserData | null>(null);
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [user, setUser] = useState(null as UserData | null);
+  const [firebaseUser, setFirebaseUser] = useState(null as FirebaseUser | null);
   const [currentPage, setCurrentPage] = useState('home');
   const [loading, setLoading] = useState(true);
 
@@ -59,12 +64,28 @@ export default function App() {
     return () => unsubscribe();
   }, [auth, db]);
 
-  const handleOnboardingComplete = async (userData: FirebaseUser) => {
-    setFirebaseUser(userData);
-    const userDocRef = doc(db, "users", userData.uid);
+  const handleOnboardingComplete = async (firebaseUser: FirebaseUser) => {
+    setFirebaseUser(firebaseUser);
+    const userDocRef = doc(db, "users", firebaseUser.uid);
     const userDocSnap = await getDoc(userDocRef);
     if (userDocSnap.exists()) {
       setUser(userDocSnap.data() as UserData);
+    } else {
+
+      const initialUserData: UserData = {
+        name: firebaseUser.displayName || '',
+        email: firebaseUser.email || '',
+        avatar: { mood: 'happy', outfit: 'default', accessories: [] },
+        trustedContact: '',
+        points: 0,
+        streak: 0,
+        currentMood: 'happy',
+        onboarded: true,
+        unlockedOutfits: ['default', 'formal'],
+        unlockedAccessories: [],
+      };
+      await setDoc(userDocRef, initialUserData);
+      setUser(initialUserData);
     }
   };
 
@@ -74,6 +95,28 @@ export default function App() {
       await updateDoc(userDocRef, updatedUser as { [key: string]: any });
       setUser(updatedUser);
     }
+  };
+
+  const handleUnlockItem = async (type: 'outfit' | 'accessory', itemId: string, cost: number) => {
+    if (user && firebaseUser && user.points >= cost) {
+      const updatedUser = { ...user };
+      if (type === 'outfit') {
+        updatedUser.unlockedOutfits = [...user.unlockedOutfits, itemId];
+      } else {
+        updatedUser.unlockedAccessories = [...user.unlockedAccessories, itemId];
+      }
+      updatedUser.points -= cost;
+
+      const userDocRef = doc(db, "users", firebaseUser.uid);
+      await updateDoc(userDocRef, {
+        points: updatedUser.points,
+        unlockedOutfits: updatedUser.unlockedOutfits,
+        unlockedAccessories: updatedUser.unlockedAccessories,
+      });
+      setUser(updatedUser);
+      return true;
+    }
+    return false;
   };
 
   const handleMoodLogged = async (mood: string, note: string) => {
@@ -167,6 +210,7 @@ export default function App() {
         user={user}
         onBack={() => setCurrentPage('home')}
         onSave={handleAvatarSave}
+        onUnlockItem={handleUnlockItem} 
       />
     );
   }
@@ -187,9 +231,19 @@ export default function App() {
   };
 
   const renderCurrentPage = () => {
+    const currentOverlayGifs: string[] = [];
+    if (user?.avatar?.outfit === 'formal') {
+      currentOverlayGifs.push(blackGif);
+    } else if (user?.avatar?.outfit === 'casual') {
+      currentOverlayGifs.push(casualGif);
+    } else if (user?.avatar?.outfit === 'sporty') {
+      currentOverlayGifs.push(sportsGif);
+    }
+    // Future: Add more GIFs based on user?.avatar?.accessories
+
     switch (currentPage) {
       case 'home':
-        return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} />;
+        return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} overlayGifs={currentOverlayGifs} />;
       case 'mood':
         return <MoodTracker user={user} onMoodLogged={handleMoodLogged} onBack={handleBackToHome} />;
       case 'chat':
@@ -201,7 +255,7 @@ export default function App() {
       case 'profile':
         return <ProfilePage user={user} onUserUpdate={handleUserUpdate} onBack={handleBackToHome} onLogout={handleLogout} />;
       default:
-        return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} />;
+        return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} overlayGifs={currentOverlayGifs} />;
     }
   };
 

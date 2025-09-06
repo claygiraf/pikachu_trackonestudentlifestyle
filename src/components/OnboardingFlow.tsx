@@ -16,12 +16,12 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const auth = getAuth(app);
   const db = getFirestore(app); // 初始化 Firestore
   const [creating, setCreating] = useState(false);
-  const [createdUser, setCreatedUser] = useState<User | null>(null);
+  const [createdUser, setCreatedUser] = useState(null as User | null);
   const [step, setStep] = useState(0);
-  const [mode, setMode] = useState<'welcome' | 'signup' | 'login'>('welcome');
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [loginError, setLoginError] = useState<string | null>(null); // 统一的登录错误信息
+  const [mode, setMode] = useState('welcome' as 'welcome' | 'signup' | 'login');
+  const [emailError, setEmailError] = useState(null as string | null);
+  const [passwordError, setPasswordError] = useState(null as string | null);
+  const [loginPasswordError, setLoginPasswordError] = useState(null as string | null);
   const [userData, setUserData] = useState({
     name: '',
     email: '',
@@ -35,23 +35,11 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   });
 
   const handleLogin = async () => {
-    setLoginError(null);
-
-    if (!loginData.email || !loginData.password) {
-      setLoginError('Email and password are required.');
-      return;
-    }
-
     try {
       const userCredential = await signInWithEmailAndPassword(auth, loginData.email, loginData.password);
       onComplete(userCredential.user);
     } catch (error: any) {
-      // Firebase Auth 错误处理
-      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        setLoginError('Invalid email or password.');
-      } else {
-        setLoginError(`Failed Login: ${error.message}`);
-      }
+      alert(`Failed Login: ${error.message}`);
     }
   };
 
@@ -71,6 +59,9 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         trustedContact: finalUserData.trustedContact,
         createdAt: new Date(),
         onboarded: true,
+        points: 0, // Initialize points for new users
+        unlockedOutfits: ['default', 'formal'], // Default unlocked outfits
+        unlockedAccessories: [], // Default unlocked accessories
       });
 
       onComplete(createdUser);
@@ -184,23 +175,14 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                 type="email"
                 placeholder="Email"
                 value={loginData.email}
-                onChange={(e) => {
-                  setLoginData(prev => ({ ...prev, email: e.target.value }));
-                  setLoginError(null); // 清除错误
-                }}
-                className={loginError ? "border-red-500" : ""} // 如果有错误，邮件框也变红
+                onChange={(e) => setLoginData(prev => ({ ...prev, email: e.target.value }))}
               />
               <Input
                 type="password"
                 placeholder="Password"
                 value={loginData.password}
-                onChange={(e) => {
-                  setLoginData(prev => ({ ...prev, password: e.target.value }));
-                  setLoginError(null); // 清除错误
-                }}
-                className={loginError ? "border-red-500" : ""}
+                onChange={(e) => setLoginData(prev => ({ ...prev, password: e.target.value }))}
               />
-              {loginError && <p className="text-red-500 text-sm mt-1">{loginError}</p>}
               <Button
                 onClick={handleLogin}
                 className="w-full bg-blue-600 hover:bg-blue-700"

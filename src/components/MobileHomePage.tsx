@@ -1,14 +1,16 @@
 import { LottieAvatar } from "./LottieAvatar";
 import { Card, CardContent } from "./ui/card";
 import { Heart, Target, BookOpen, MessageCircle, Star, Flame, Trophy, Settings } from "lucide-react";
+import blackGif from './avatar/black.gif'; // 导入 black.gif
 
 interface MobileHomePageProps {
   user: any;
   onNavigate: (page: string) => void;
   onAvatarClick: () => void;
+  overlayGifs: string[]; // 新增：用于叠加的 GIF 数组
 }
 
-export function MobileHomePage({ user, onNavigate, onAvatarClick }: MobileHomePageProps) {
+export function MobileHomePage({ user, onNavigate, onAvatarClick, overlayGifs }: MobileHomePageProps) {
   const quickActions = [
     {
       id: 'mood',
@@ -117,11 +119,10 @@ export function MobileHomePage({ user, onNavigate, onAvatarClick }: MobileHomePa
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center space-y-6">
           <LottieAvatar
-            mood={user?.currentMood || 'happy'}
-            outfit={user?.avatar?.outfit || 'default'}
             size="xl"
             onClick={onAvatarClick}
             className="mx-auto"
+            overlayGifs={overlayGifs} // 传递 overlayGifs
           />
           
           <div className="space-y-2">

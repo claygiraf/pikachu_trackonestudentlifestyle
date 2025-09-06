@@ -4,132 +4,95 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { ArrowLeft, Star, Lock, Check } from "lucide-react";
+import blackGif from './avatar/black.gif'; // Import black.gif
+import casualGif from './avatar/casual.gif'; // Import casual.gif
+import sportsGif from './avatar/sports.gif'; // Import sports.gif
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog"; // Import AlertDialog components
 
 interface AvatarCustomizationProps {
   user: any;
   onBack: () => void;
   onSave: (outfit: string, accessories: string[]) => void;
+  onUnlockItem: (type: 'outfit' | 'accessory', itemId: string, cost: number) => Promise<boolean>;
 }
 
-interface OutfitItem {
+interface BaseOutfitItem {
   id: string;
   name: string;
   type: 'outfit' | 'accessory';
   cost: number;
   preview: string;
+}
+
+interface OutfitItem extends BaseOutfitItem {
   unlocked: boolean;
   equipped: boolean;
 }
 
-export function AvatarCustomization({ user, onBack, onSave }: AvatarCustomizationProps) {
+export function AvatarCustomization({ user, onBack, onSave, onUnlockItem }: AvatarCustomizationProps) {
   const [selectedOutfit, setSelectedOutfit] = useState(user?.avatar?.outfit || 'default');
-  const [selectedAccessories, setSelectedAccessories] = useState<string[]>(user?.avatar?.accessories || []);
-  const [activeTab, setActiveTab] = useState<'outfits' | 'accessories'>('outfits');
+  const [selectedAccessories, setSelectedAccessories] = useState(user?.avatar?.accessories || [] as string[]);
+  const [activeTab, setActiveTab] = useState('outfits' as 'outfits' | 'accessories');
+  const [itemToUnlock, setItemToUnlock] = useState(null as { type: 'outfit' | 'accessory', item: OutfitItem } | null); // State to hold item to be unlocked
 
-  const userPoints = user?.points || 127;
+  const userPoints = user?.points || 0;
+  const unlockedOutfits = user?.unlockedOutfits || ['default', 'formal'];
+  const unlockedAccessories = user?.unlockedAccessories || [];
 
-  const outfits: OutfitItem[] = [
-    {
-      id: 'default',
-      name: 'Default',
-      type: 'outfit',
-      cost: 0,
-      preview: '👕',
-      unlocked: true,
-      equipped: selectedOutfit === 'default'
-    },
-    {
-      id: 'casual',
-      name: 'Casual Wear',
-      type: 'outfit',
-      cost: 50,
-      preview: '👔',
-      unlocked: userPoints >= 50,
-      equipped: selectedOutfit === 'casual'
-    },
-    {
-      id: 'formal',
-      name: 'Formal Suit',
-      type: 'outfit',
-      cost: 100,
-      preview: '🤵',
-      unlocked: userPoints >= 100,
-      equipped: selectedOutfit === 'formal'
-    },
-    {
-      id: 'sporty',
-      name: 'Sports Outfit',
-      type: 'outfit',
-      cost: 75,
-      preview: '🏃',
-      unlocked: userPoints >= 75,
-      equipped: selectedOutfit === 'sporty'
-    },
-    {
-      id: 'elegant',
-      name: 'Elegant Style',
-      type: 'outfit',
-      cost: 120,
-      preview: '💃',
-      unlocked: userPoints >= 120,
-      equipped: selectedOutfit === 'elegant'
-    },
+  const baseOutfits: BaseOutfitItem[] = [
+    { id: 'default', name: 'Default', type: 'outfit', cost: 0, preview: '👕' },
+    { id: 'casual', name: 'Casual Wear', type: 'outfit', cost: 150, preview: '👔' },
+    { id: 'formal', name: 'Formal Suit', type: 'outfit', cost: 0, preview: '🤵' }, // Formal is default unlocked
+    { id: 'sporty', name: 'Sports Outfit', type: 'outfit', cost: 200, preview: '🏃' },
+    { id: 'elegant', name: 'Elegant Style', type: 'outfit', cost: 300, preview: '💃' },
   ];
 
-  const accessories: OutfitItem[] = [
-    {
-      id: 'hat',
-      name: 'Cool Hat',
-      type: 'accessory',
-      cost: 30,
-      preview: '🎩',
-      unlocked: userPoints >= 30,
-      equipped: selectedAccessories.includes('hat')
-    },
-    {
-      id: 'glasses',
-      name: 'Smart Glasses',
-      type: 'accessory',
-      cost: 40,
-      preview: '👓',
-      unlocked: userPoints >= 40,
-      equipped: selectedAccessories.includes('glasses')
-    },
-    {
-      id: 'watch',
-      name: 'Digital Watch',
-      type: 'accessory',
-      cost: 60,
-      preview: '⌚',
-      unlocked: userPoints >= 60,
-      equipped: selectedAccessories.includes('watch')
-    },
-    {
-      id: 'necklace',
-      name: 'Sparkle Necklace',
-      type: 'accessory',
-      cost: 80,
-      preview: '📿',
-      unlocked: userPoints >= 80,
-      equipped: selectedAccessories.includes('necklace')
-    },
+  const baseAccessories: BaseOutfitItem[] = [
+    { id: 'hat', name: 'Cool Hat', type: 'accessory', cost: 100, preview: '🎩' },
+    { id: 'glasses', name: 'Smart Glasses', type: 'accessory', cost: 120, preview: '👓' },
+    { id: 'watch', name: 'Digital Watch', type: 'accessory', cost: 180, preview: '⌚' },
+    { id: 'necklace', name: 'Sparkle Necklace', type: 'accessory', cost: 250, preview: '📿' },
   ];
 
-  const selectOutfit = (outfitId: string) => {
+  const outfits: OutfitItem[] = baseOutfits.map(outfit => ({
+    ...outfit,
+    unlocked: unlockedOutfits.includes(outfit.id),
+    equipped: selectedOutfit === outfit.id
+  }));
+
+  const accessories: OutfitItem[] = baseAccessories.map(accessory => ({
+    ...accessory,
+    unlocked: unlockedAccessories.includes(accessory.id),
+    equipped: selectedAccessories.includes(accessory.id)
+  }));
+
+  const selectOutfit = async (outfitId: string) => {
     const outfit = outfits.find(o => o.id === outfitId);
-    if (outfit && outfit.unlocked) {
+    if (!outfit) return;
+
+    if (outfit.unlocked) {
       setSelectedOutfit(outfitId);
+    } else if (userPoints >= outfit.cost) {
+      setItemToUnlock({ type: 'outfit', item: outfit }); // Set item to unlock for confirmation
+    } else {
+      alert(`Not enough points to unlock ${outfit.name}. You need ${outfit.cost} points.`);
     }
   };
 
-  const toggleAccessory = (accessoryId: string) => {
+  const toggleAccessory = async (accessoryId: string) => {
     const accessory = accessories.find(a => a.id === accessoryId);
-    if (accessory && accessory.unlocked) {
+    if (!accessory) return;
+
+    if (accessory.unlocked) {
       setSelectedAccessories(prev =>
         prev.includes(accessoryId)
           ? prev.filter(id => id !== accessoryId)
           : [...prev, accessoryId]
       );
+    } else if (userPoints >= accessory.cost) {
+      setItemToUnlock({ type: 'accessory', item: accessory }); // Set item to unlock for confirmation
+    } else {
+      alert(`Not enough points to unlock ${accessory.name}. You need ${accessory.cost} points.`);
     }
   };
 
@@ -162,10 +125,14 @@ export function AvatarCustomization({ user, onBack, onSave }: AvatarCustomizatio
       <div className="absolute top-28 left-0 right-0 z-10">
         <div className="flex justify-center">
           <LottieAvatar
-            mood={user?.currentMood || 'happy'}
-            outfit={selectedOutfit}
             size="xl"
             className="mx-auto"
+            overlayGifs={
+              selectedOutfit === 'formal' ? [blackGif] :
+              selectedOutfit === 'casual' ? [casualGif] :
+              selectedOutfit === 'sporty' ? [sportsGif] :
+              []
+            } // 根据选择的套装动态添加叠加 GIF
           />
         </div>
       </div>
@@ -292,6 +259,40 @@ export function AvatarCustomization({ user, onBack, onSave }: AvatarCustomizatio
           </Button>
         </div>
       </div>
+
+      {/* Unlock Confirmation Dialog */}
+      <AlertDialog open={!!itemToUnlock} onOpenChange={() => setItemToUnlock(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Purchase</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to unlock "{itemToUnlock?.item.name}" for {itemToUnlock?.item.cost} points?
+              You currently have {userPoints} points.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setItemToUnlock(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => {
+              if (itemToUnlock) {
+                const success = await onUnlockItem(itemToUnlock.type, itemToUnlock.item.id, itemToUnlock.item.cost);
+                if (success) {
+                  if (itemToUnlock.type === 'outfit') {
+                    setSelectedOutfit(itemToUnlock.item.id);
+                  } else {
+                    setSelectedAccessories(prev => [...prev, itemToUnlock.item.id]);
+                  }
+                  alert(`Successfully unlocked ${itemToUnlock.item.name}!`);
+                } else {
+                  alert("Failed to unlock item. Not enough points or an error occurred.");
+                }
+                setItemToUnlock(null); // Close dialog
+              }
+            }}>
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Floating Sparkles */}
       <div className="absolute top-40 right-8 animate-ping">
