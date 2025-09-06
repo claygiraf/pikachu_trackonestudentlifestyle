@@ -276,7 +276,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
           <div>
             <label className="block text-sm mb-2">Base Mood</label>
             <div className="grid grid-cols-4 gap-2">
-              {['happy', 'calm', 'excited', 'tired'].map(mood => (
+              {['happy', 'calm', 'neutral', 'sad', 'anxious', 'stressed'].map(mood => (
                 <button
                   key={mood}
                   onClick={() => setUserData(prev => ({

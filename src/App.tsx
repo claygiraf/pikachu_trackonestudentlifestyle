@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Toaster } from 'sonner';
 import { OnboardingFlow } from "./components/OnboardingFlow";
 import { MobileHomePage } from "./components/MobileHomePage";
 import { AvatarCustomization } from "./components/AvatarCustomization";
@@ -8,7 +9,6 @@ import { GoalsPage } from "./components/GoalsPage";
 import { JournalPage } from "./components/JournalPage";
 import { EmergencyMode } from "./components/EmergencyMode";
 import { ProfilePage } from "./components/ProfilePage";
-import { MobileNavigation } from "./components/MobileNavigation";
 import { getAuth, onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
 import { getFirestore, doc, getDoc, updateDoc, setDoc } from "firebase/firestore";
 import { app } from "./firebase";
@@ -16,7 +16,9 @@ import blackGif from './components/avatar/black.gif'; // Import black.gif
 import casualGif from './components/avatar/casual.gif'; // Import casual.gif
 import sportsGif from './components/avatar/sports.gif'; // Import sports.gif
 
+
 interface UserData {
+  uid: string; // Add uid to UserData interface
   name: string;
   email: string;
   avatar: {
@@ -27,7 +29,7 @@ interface UserData {
   trustedContact: string;
   points: number;
   streak: number;
-  currentMood: string;
+  currentMood: LottieAvatarProps['mood']; // Change type to match LottieAvatarProps['mood']
   onboarded: boolean;
   unlockedOutfits: string[];
   unlockedAccessories: string[];
@@ -48,7 +50,7 @@ export default function App() {
         const userDocRef = doc(db, "users", user.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
-          setUser(userDocSnap.data() as UserData);
+          setUser({ ...userDocSnap.data(), uid: user.uid } as UserData); // Add uid from firebaseUser
         } else {
           // User is authenticated but no Firestore data, likely just signed up
           // OnboardingFlow will handle initial Firestore data creation
@@ -64,22 +66,30 @@ export default function App() {
     return () => unsubscribe();
   }, [auth, db]);
 
+  useEffect(() => {
+    // 只在切换到 home 或 mood 页时刷新 user
+    if (currentPage === 'home' || currentPage === 'mood') {
+      reloadUser();
+    }
+  }, [currentPage]);
+
   const handleOnboardingComplete = async (firebaseUser: FirebaseUser) => {
     setFirebaseUser(firebaseUser);
     const userDocRef = doc(db, "users", firebaseUser.uid);
     const userDocSnap = await getDoc(userDocRef);
     if (userDocSnap.exists()) {
-      setUser(userDocSnap.data() as UserData);
+      setUser({ ...userDocSnap.data(), uid: firebaseUser.uid } as UserData); // Add uid from firebaseUser
     } else {
 
       const initialUserData: UserData = {
+        uid: firebaseUser.uid, // Add uid here
         name: firebaseUser.displayName || '',
         email: firebaseUser.email || '',
-        avatar: { mood: 'happy', outfit: 'default', accessories: [] },
+        avatar: { mood: 'neutral', outfit: 'default', accessories: [] }, // Default to 'neutral'
         trustedContact: '',
         points: 0,
         streak: 0,
-        currentMood: 'happy',
+        currentMood: 'neutral', // Default to 'neutral'
         onboarded: true,
         unlockedOutfits: ['default', 'formal'],
         unlockedAccessories: [],
@@ -89,11 +99,21 @@ export default function App() {
     }
   };
 
+  const reloadUser = async () => {
+    if (firebaseUser) {
+      const userDocRef = doc(db, "users", firebaseUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
+      if (userDocSnap.exists()) {
+        setUser({ ...userDocSnap.data(), uid: firebaseUser.uid } as UserData);
+      }
+    }
+  };
+
   const handleUserUpdate = async (updatedUser: UserData) => {
     if (firebaseUser) {
       const userDocRef = doc(db, "users", firebaseUser.uid);
       await updateDoc(userDocRef, updatedUser as { [key: string]: any });
-      setUser(updatedUser);
+      setUser({ ...updatedUser, uid: firebaseUser.uid }); // Ensure uid is present
     }
   };
 
@@ -121,15 +141,13 @@ export default function App() {
 
   const handleMoodLogged = async (mood: string, note: string) => {
     if (user && firebaseUser) {
-      const updatedUser = {
+      const updatedUser: UserData = { // Explicitly type updatedUser
         ...user,
-        currentMood: mood,
-        points: user.points + 5
+        currentMood: mood as LottieAvatarProps['mood'], // Cast to correct type
       };
       const userDocRef = doc(db, "users", firebaseUser.uid);
       await updateDoc(userDocRef, {
         currentMood: updatedUser.currentMood,
-        points: updatedUser.points
       });
       setUser(updatedUser);
     }
@@ -168,19 +186,22 @@ export default function App() {
 
   const handleAvatarSave = async (outfit: string, accessories: string[]) => {
     if (user && firebaseUser) {
-      const updatedUser = {
-        ...user,
-        avatar: {
-          ...user.avatar,
-          outfit,
-          accessories
-        }
-      };
       const userDocRef = doc(db, "users", firebaseUser.uid);
+
+      const avatarToSave: typeof user.avatar = {
+        outfit,
+        accessories,
+        mood: user.avatar.mood ?? 'neutral'
+      };
+
       await updateDoc(userDocRef, {
-        avatar: updatedUser.avatar
+        avatar: avatarToSave
       });
-      setUser(updatedUser);
+
+      const userDocSnap = await getDoc(userDocRef);
+      if (userDocSnap.exists()) {
+        setUser({ ...userDocSnap.data(), uid: firebaseUser.uid } as UserData);
+      }
     }
   };
 
@@ -243,7 +264,7 @@ export default function App() {
 
     switch (currentPage) {
       case 'home':
-        return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} overlayGifs={currentOverlayGifs} />;
+        return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} overlayGifs={currentOverlayGifs} mood={user.currentMood} />;
       case 'mood':
         return <MoodTracker user={user} onMoodLogged={handleMoodLogged} onBack={handleBackToHome} />;
       case 'chat':
@@ -255,13 +276,14 @@ export default function App() {
       case 'profile':
         return <ProfilePage user={user} onUserUpdate={handleUserUpdate} onBack={handleBackToHome} onLogout={handleLogout} />;
       default:
-        return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} overlayGifs={currentOverlayGifs} />;
+        return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} overlayGifs={currentOverlayGifs} mood={user.currentMood} />;
     }
   };
 
   return (
     <div className="relative min-h-screen bg-gray-50 overflow-hidden">
       {renderCurrentPage()}
+      <Toaster/>
     </div>
   );
 }

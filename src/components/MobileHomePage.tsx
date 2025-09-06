@@ -1,16 +1,112 @@
-import { LottieAvatar } from "./LottieAvatar";
+import { useState, useEffect } from "react"; // Import useState and useEffect
+import { LottieAvatar, LottieAvatarProps } from "./LottieAvatar"; // Import LottieAvatarProps
 import { Card, CardContent } from "./ui/card";
 import { Heart, Target, BookOpen, MessageCircle, Star, Flame, Trophy, Settings } from "lucide-react";
-import blackGif from './avatar/black.gif'; // 导入 black.gif
+import { db } from "../firebase"; // Import Firestore db
+import { doc, getDoc } from "firebase/firestore"; // Import Firestore functions
+import { toast } from "sonner"; // Import toast from sonner
+import { moods as validMoods } from "./MoodTracker"; // Import moods array from MoodTracker
+
+// Import outfit GIFs
+import blackGif from './avatar/black.gif';
+import casualGif from './avatar/casual.gif';
+import sportsGif from './avatar/sports.gif';
 
 interface MobileHomePageProps {
   user: any;
   onNavigate: (page: string) => void;
   onAvatarClick: () => void;
-  overlayGifs: string[]; // 新增：用于叠加的 GIF 数组
+  refreshKey?: number; // Add refreshKey prop
 }
 
-export function MobileHomePage({ user, onNavigate, onAvatarClick, overlayGifs }: MobileHomePageProps) {
+export function MobileHomePage({ user, onNavigate, onAvatarClick, refreshKey }: MobileHomePageProps) {
+  const [currentMood, setCurrentMood] = useState<LottieAvatarProps['mood'] | null>(null);
+  const [overlayGifs, setOverlayGifs] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchUserMoodAndAvatar = async () => {
+      if (!user) return;
+
+      console.log("MobileHomePage: Fetching user data for:", user.uid); // Debug log
+      console.log("MobileHomePage: Initial user object:", user); // Debug log
+
+      // Fetch current day's mood from the moods map
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = (today.getMonth() + 1).toString().padStart(2, '0');
+      const day = today.getDate().toString().padStart(2, '0');
+      const docId = `${year}-${month}-${day}`; // YYYY-MM-DD local date as document ID
+
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      // Get valid mood IDs from MoodTracker
+      const validMoodIds = validMoods.map(m => m.id);
+
+      if (userDocSnap.exists()) {
+        const moodsMap = userDocSnap.data().moods || {};
+        const todayMood = moodsMap[docId];
+
+        if (todayMood && validMoodIds.includes(todayMood.mood)) {
+          setCurrentMood(todayMood.mood);
+          console.log("MobileHomePage: Mood from moods map:", todayMood.mood); // Debug log
+        } else {
+          setCurrentMood(null); // Default to null if no mood logged today or mood is invalid
+          console.log("MobileHomePage: No valid mood found in moods map for today. Setting currentMood to null."); // Debug log
+          toast("You haven't record your mood today!", {
+            description: "Press Here!!",
+            action: {
+              label: "Log Mood",
+              onClick: () => onNavigate('mood'),
+            },
+            duration: Infinity, // Keep notification until dismissed or action taken
+          });
+        }
+      } else {
+        setCurrentMood(null); // Default to null if user doc doesn't exist
+        console.log("MobileHomePage: User document does not exist. Setting currentMood to null."); // Debug log
+        toast("You haven't record your mood today!", {
+          description: "Press Here!!",
+          action: {
+            label: "Log Mood",
+            onClick: () => onNavigate('mood'),
+          },
+          duration: Infinity, // Keep notification until dismissed or action taken
+        });
+      }
+
+      // Fetch avatar outfit and accessories
+      const userAvatar = userDocSnap.data()?.avatar || {};
+      const selectedOutfit = userAvatar.outfit || 'default';
+      const selectedAccessories = userAvatar.accessories || [];
+
+      const currentOverlayGifs: string[] = [];
+      if (user?.avatar?.outfit === 'formal') {
+        currentOverlayGifs.push(blackGif);
+      } else if (user?.avatar?.outfit === 'casual') {
+        currentOverlayGifs.push(casualGif);
+      } else if (user?.avatar?.outfit === 'sporty') {
+        currentOverlayGifs.push(sportsGif);
+      }
+      // Add accessories to overlayGifs if needed, assuming accessory paths are stored directly
+      // For now, we'll just use the outfit. If accessories are also GIFs, they need to be handled here.
+      
+      setOverlayGifs(currentOverlayGifs);
+      console.log("MobileHomePage: Overlay Gifs (from outfit):", currentOverlayGifs); // Debug log
+
+      // Ensure that user?.avatar?.mood is not used for current mood display
+      // The currentMood state should solely be driven by the moods map.
+      // Explicitly ensure user.avatar.mood is not used for current mood display.
+      // This is a defensive measure to prevent any potential unintended usage.
+      if (user?.avatar) {
+        user.avatar.mood = undefined; // Clear the mood from the user.avatar object
+        console.log("MobileHomePage: Cleared user.avatar.mood. Updated user object:", user); // Debug log
+      }
+    };
+
+    fetchUserMoodAndAvatar();
+  }, [user]); // Add onNavigate to dependencies
+
   const quickActions = [
     {
       id: 'mood',
@@ -117,19 +213,21 @@ export function MobileHomePage({ user, onNavigate, onAvatarClick, overlayGifs }:
 
       {/* Center Avatar */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="text-center space-y-6">
-          <LottieAvatar
-            size="xl"
-            onClick={onAvatarClick}
-            className="mx-auto"
-            overlayGifs={overlayGifs} // 传递 overlayGifs
-          />
-          
-          <div className="space-y-2">
-            <h2 className="text-2xl text-gray-800">WithU 💙</h2>
-            <p className="text-gray-600">Your gentle companion</p>
+          <div className="text-center space-y-6">
+            <LottieAvatar
+              size="xl"
+              onClick={onAvatarClick}
+              className="mx-auto"
+              mood={currentMood} // Pass currentMood state to LottieAvatar
+              overlayGifs={overlayGifs} // 传递 overlayGifs
+              refreshKey={refreshKey} // Pass refreshKey to LottieAvatar
+            />
+            
+            <div className="space-y-2">
+              <h2 className="text-2xl text-gray-800">WithU 💙</h2>
+              <p className="text-gray-600">Your gentle companion</p>
+            </div>
           </div>
-        </div>
       </div>
 
       {/* Bottom Progress Indicators */}
@@ -186,7 +284,7 @@ export function MobileHomePage({ user, onNavigate, onAvatarClick, overlayGifs }:
         <div className="w-8 h-8 bg-blue-200 rounded-full opacity-30"></div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes fade-in-left {
           from {
             opacity: 0;

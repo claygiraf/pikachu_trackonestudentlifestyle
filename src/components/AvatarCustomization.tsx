@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { LottieAvatar } from "./LottieAvatar";
+import { useState, useEffect } from "react"; // Import useEffect
+import { LottieAvatar, LottieAvatarProps } from "./LottieAvatar"; // Import LottieAvatarProps
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -8,12 +8,16 @@ import blackGif from './avatar/black.gif'; // Import black.gif
 import casualGif from './avatar/casual.gif'; // Import casual.gif
 import sportsGif from './avatar/sports.gif'; // Import sports.gif
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog"; // Import AlertDialog components
+import { db } from "../firebase"; // Import Firestore db
+import { doc, getDoc } from "firebase/firestore"; // Import Firestore functions
+import { moods as validMoods } from "./MoodTracker"; // Import moods array from MoodTracker
 
 interface AvatarCustomizationProps {
   user: any;
   onBack: () => void;
   onSave: (outfit: string, accessories: string[]) => void;
   onUnlockItem: (type: 'outfit' | 'accessory', itemId: string, cost: number) => Promise<boolean>;
+  refreshKey?: number; // Add refreshKey prop
 }
 
 interface BaseOutfitItem {
@@ -29,11 +33,43 @@ interface OutfitItem extends BaseOutfitItem {
   equipped: boolean;
 }
 
-export function AvatarCustomization({ user, onBack, onSave, onUnlockItem }: AvatarCustomizationProps) {
+export function AvatarCustomization({ user, onBack, onSave, onUnlockItem, refreshKey }: AvatarCustomizationProps) { // Receive refreshKey
   const [selectedOutfit, setSelectedOutfit] = useState(user?.avatar?.outfit || 'default');
   const [selectedAccessories, setSelectedAccessories] = useState(user?.avatar?.accessories || [] as string[]);
   const [activeTab, setActiveTab] = useState('outfits' as 'outfits' | 'accessories');
   const [itemToUnlock, setItemToUnlock] = useState(null as { type: 'outfit' | 'accessory', item: OutfitItem } | null); // State to hold item to be unlocked
+  const [currentMood, setCurrentMood] = useState<LottieAvatarProps['mood'] | null>(null); // State for current mood, allow null
+
+  useEffect(() => {
+    const fetchUserMood = async () => {
+      if (!user?.uid) return;
+
+      const today = new Date();
+      // Generate docId based on local date (Singapore time)
+      const year = today.getFullYear();
+      const month = (today.getMonth() + 1).toString().padStart(2, '0');
+      const day = today.getDate().toString().padStart(2, '0');
+      const docId = `${year}-${month}-${day}`; // YYYY-MM-DD local date as document ID
+
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+        const moodsMap = userDocSnap.data().moods || {};
+        const todayMood = moodsMap[docId];
+
+        if (todayMood && validMoods.map(m => m.id).includes(todayMood.mood)) {
+          setCurrentMood(todayMood.mood);
+        } else {
+          setCurrentMood(null); // Default to null if no mood logged today or mood is invalid
+        }
+      } else {
+        setCurrentMood(null); // Default to null if user doc doesn't exist
+      }
+    };
+
+    fetchUserMood();
+  }, [user]);
 
   const userPoints = user?.points || 0;
   const unlockedOutfits = user?.unlockedOutfits || ['default', 'formal'];
@@ -123,18 +159,20 @@ export function AvatarCustomization({ user, onBack, onSave, onUnlockItem }: Avat
 
       {/* Preview Section */}
       <div className="absolute top-28 left-0 right-0 z-10">
-        <div className="flex justify-center">
-          <LottieAvatar
-            size="xl"
-            className="mx-auto"
-            overlayGifs={
-              selectedOutfit === 'formal' ? [blackGif] :
-              selectedOutfit === 'casual' ? [casualGif] :
-              selectedOutfit === 'sporty' ? [sportsGif] :
-              []
-            } // 根据选择的套装动态添加叠加 GIF
-          />
-        </div>
+          <div className="flex justify-center">
+            <LottieAvatar
+              size="xl"
+              className="mx-auto"
+              mood={currentMood} // Pass current mood to LottieAvatar
+              overlayGifs={
+                selectedOutfit === 'formal' ? [blackGif] :
+                selectedOutfit === 'casual' ? [casualGif] :
+                selectedOutfit === 'sporty' ? [sportsGif] :
+                []
+              } // 根据选择的套装动态添加叠加 GIF
+              refreshKey={refreshKey} // Pass refreshKey to LottieAvatar
+            />
+          </div>
       </div>
 
       {/* Customization Panel */}

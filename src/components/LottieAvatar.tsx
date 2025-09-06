@@ -1,31 +1,53 @@
 import { useState, useEffect } from "react";
-import baseGif from './avatar/base.gif'; // Import base.gif
 
-interface LottieAvatarProps {
+// Import all mood-based GIFs
+import baseNeutralGif from './avatar/base.gif';
+import baseHappyGif from './avatar/base_happy.gif';
+import baseCalmGif from './avatar/base_calm.gif';
+import baseSadGif from './avatar/base_sad.gif';
+import baseAnxiousGif from './avatar/base_anxious.gif';
+import baseStressedGif from './avatar/base_stressed.gif';
+
+export interface LottieAvatarProps { // Export the interface
   size?: 'sm' | 'md' | 'lg' | 'xl';
   onClick?: () => void;
   className?: string;
-  overlayGifs?: string[]; // 新增：用于叠加的 GIF 数组
+  overlayGifs?: string[]; // For outfits/accessories
+  mood?: 'happy' | 'calm' | 'neutral' | 'sad' | 'anxious' | 'stressed' | null; // Current mood, allow null
+  refreshKey?: number; // Add a refreshKey to force re-render
 }
+
+const moodGifMap: Record<NonNullable<LottieAvatarProps['mood']>, string> = {
+  neutral: baseNeutralGif,
+  happy: baseHappyGif,
+  calm: baseCalmGif,
+  sad: baseSadGif,
+  anxious: baseAnxiousGif,
+  stressed: baseStressedGif,
+};
 
 export function LottieAvatar({
   size = 'lg',
   onClick,
   className = '',
-  overlayGifs = []
+  overlayGifs = [],
+  mood = null, // Default mood is null
+  refreshKey = 0 // Default refreshKey
 }: LottieAvatarProps) {
+  const effectiveMood = mood === null ? 'neutral' : mood; // Treat null as neutral
   const [loadedImages, setLoadedImages] = useState(0);
   const [allImagesLoaded, setAllImagesLoaded] = useState(false);
-  const [key, setKey] = useState(0); // Add a key to force re-render and reload images
+  const [internalKey, setInternalKey] = useState(0); // Use internalKey for image reloading
 
-  const totalImages = 1 + overlayGifs.length; // baseGif + all overlayGifs
+  const currentBaseGif = moodGifMap[effectiveMood];
+  const totalImages = 1 + overlayGifs.length; // currentBaseGif + all overlayGifs
 
   useEffect(() => {
-    // Reset loading state when overlayGifs change
+    // Reset loading state when mood, overlayGifs, or refreshKey change
     setLoadedImages(0);
     setAllImagesLoaded(false);
-    setKey(prevKey => prevKey + 1); // Change key to force re-render of img elements
-  }, [overlayGifs]);
+    setInternalKey(prevKey => prevKey + 1); // Change internalKey to force re-render of img elements
+  }, [mood, overlayGifs, refreshKey]); // Add refreshKey to dependencies
 
   useEffect(() => {
     if (totalImages > 0 && loadedImages === totalImages) {
@@ -56,21 +78,21 @@ export function LottieAvatar({
           Loading Avatar...
         </div>
       )}
-      
-      {/* Base Avatar GIF */}
-      <img 
-        key={`base-${key}`} // Use key to force re-render
-        src={`${baseGif}?t=${key}`} // Add timestamp to force reload
-        alt="Base Avatar" 
-        className={`absolute inset-0 w-full h-full object-contain ${allImagesLoaded ? '' : 'hidden'}`} 
+
+      {/* Base Avatar GIF based on mood */}
+      <img
+        key={`base-${internalKey}`} // Use internalKey to force re-render
+        src={`${currentBaseGif}?t=${internalKey}`} // Add timestamp to force reload
+        alt={`${mood} Avatar`}
+        className={`absolute inset-0 w-full h-full object-contain ${allImagesLoaded ? '' : 'hidden'}`}
         onLoad={handleImageLoad}
       />
 
       {/* Overlay Gifs for outfits/accessories */}
       {overlayGifs.map((gifPath, index) => (
         <img
-          key={`overlay-${key}-${index}`} // Use key to force re-render
-          src={`${gifPath}?t=${key}`} // Add timestamp to force reload
+          key={`overlay-${internalKey}-${index}`} // Use internalKey to force re-render
+          src={`${gifPath}?t=${internalKey}`} // Add timestamp to force reload
           alt={`Overlay ${index}`}
           className={`absolute inset-0 w-full h-full object-contain ${allImagesLoaded ? '' : 'hidden'}`}
           style={{ zIndex: index + 1 }} // Ensure overlays are above base GIF
