@@ -4,14 +4,24 @@ import { Input } from "./ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Avatar } from "./Avatar";
 import { ArrowLeft } from "lucide-react";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, User, fetchSignInMethodsForEmail } from "firebase/auth";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
+import { app } from "../firebase";
 
 interface OnboardingFlowProps {
-  onComplete: (userData: any) => void;
+  onComplete: (userData: User) => void;
 }
 
 export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
+  const auth = getAuth(app);
+  const db = getFirestore(app); // 初始化 Firestore
+  const [creating, setCreating] = useState(false);
+  const [createdUser, setCreatedUser] = useState<User | null>(null);
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState<'welcome' | 'signup' | 'login'>('welcome');
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null); // 统一的登录错误信息
   const [userData, setUserData] = useState({
     name: '',
     email: '',
@@ -24,27 +34,49 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     password: ''
   });
 
-  const handleLogin = () => {
-    // Mock login - in a real app, this would validate against a backend
-    const savedUsers = JSON.parse(localStorage.getItem('withU_users') || '[]');
-    const existingUser = savedUsers.find((user: any) => 
-      user.email === loginData.email && user.password === loginData.password
-    );
-    
-    if (existingUser) {
-      onComplete(existingUser);
-    } else {
-      alert('Invalid credentials. For demo purposes, try signing up instead.');
+  const handleLogin = async () => {
+    setLoginError(null);
+
+    if (!loginData.email || !loginData.password) {
+      setLoginError('Email and password are required.');
+      return;
+    }
+
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, loginData.email, loginData.password);
+      onComplete(userCredential.user);
+    } catch (error: any) {
+      // Firebase Auth 错误处理
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        setLoginError('Invalid email or password.');
+      } else {
+        setLoginError(`Failed Login: ${error.message}`);
+      }
     }
   };
 
-  const handleSignup = (finalUserData: any) => {
-    // Save to mock user database
-    const savedUsers = JSON.parse(localStorage.getItem('withU_users') || '[]');
-    const newUser = { ...finalUserData, id: Date.now() };
-    savedUsers.push(newUser);
-    localStorage.setItem('withU_users', JSON.stringify(savedUsers));
-    onComplete(newUser);
+  const handleSignup = async (finalUserData: any) => {
+    if (!createdUser) {
+      alert("No user created. Please go back to start.");
+      return;
+    }
+    // 确保 createdUser 是 User 类型
+    const userToComplete = createdUser as User;
+
+    try {
+      await setDoc(doc(db, "users", createdUser.uid), {
+        name: finalUserData.name,
+        email: finalUserData.email,
+        avatar: finalUserData.avatar,
+        trustedContact: finalUserData.trustedContact,
+        createdAt: new Date(),
+        onboarded: true,
+      });
+
+      onComplete(createdUser);
+    } catch (error: any) {
+      alert(`Failed Saving User Data: ${error.message}`);
+    }
   };
 
   const goBack = () => {
@@ -55,6 +87,49 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         setMode('welcome');
         setStep(0);
       }
+    }
+  };
+
+  const handleContinueToAvatar = async () => {
+    if (creating) return;
+    setCreating(true);
+    setEmailError(null);
+    setPasswordError(null);
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(userData.email)) {
+      setEmailError('Please enter a valid email address.');
+      setCreating(false);
+      return;
+    }
+    if (userData.password.length < 6) {
+      setPasswordError('Password should be at least 6 characters long.');
+      setCreating(false);
+      return;
+    }
+
+    try {
+      const signInMethods = await fetchSignInMethodsForEmail(auth, userData.email);
+      if (signInMethods && signInMethods.length > 0) {
+        setEmailError('This email is already registered. Please log in instead.');
+        setCreating(false);
+        return;
+      }
+
+      const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
+      setCreatedUser(userCredential.user);
+      setStep(1);
+    } catch (error: any) {
+      // Firebase Auth 错误处理
+      if (error.code === 'auth/email-already-in-use') {
+        setEmailError('This email is already registered. Please log in instead.');
+      } else if (error.code === 'auth/weak-password') {
+        setPasswordError('Password should be at least 6 characters long.');
+      } else {
+        alert(`Failed Sign Up: ${error.message}`);
+      }
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -69,15 +144,15 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
               <p className="text-lg text-gray-600">Your gentle mental health companion</p>
             </div>
             <div className="space-y-3">
-              <Button 
-                onClick={() => { setMode('signup'); setStep(0); }} 
+              <Button
+                onClick={() => { setMode('signup'); setStep(0); }}
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
                 Get Started
               </Button>
-              <Button 
-                onClick={() => { setMode('login'); setStep(0); }} 
-                variant="outline" 
+              <Button
+                onClick={() => { setMode('login'); setStep(0); }}
+                variant="outline"
                 className="w-full"
               >
                 Login (Existing User)
@@ -105,19 +180,28 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
               <CardTitle>Welcome Back</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Input 
-                type="email" 
-                placeholder="Email" 
+              <Input
+                type="email"
+                placeholder="Email"
                 value={loginData.email}
-                onChange={(e) => setLoginData(prev => ({ ...prev, email: e.target.value }))}
+                onChange={(e) => {
+                  setLoginData(prev => ({ ...prev, email: e.target.value }));
+                  setLoginError(null); // 清除错误
+                }}
+                className={loginError ? "border-red-500" : ""} // 如果有错误，邮件框也变红
               />
-              <Input 
-                type="password" 
-                placeholder="Password" 
+              <Input
+                type="password"
+                placeholder="Password"
                 value={loginData.password}
-                onChange={(e) => setLoginData(prev => ({ ...prev, password: e.target.value }))}
+                onChange={(e) => {
+                  setLoginData(prev => ({ ...prev, password: e.target.value }));
+                  setLoginError(null); // 清除错误
+                }}
+                className={loginError ? "border-red-500" : ""}
               />
-              <Button 
+              {loginError && <p className="text-red-500 text-sm mt-1">{loginError}</p>}
+              <Button
                 onClick={handleLogin}
                 className="w-full bg-blue-600 hover:bg-blue-700"
                 disabled={!loginData.email || !loginData.password}
@@ -145,29 +229,44 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         <CardTitle>Create Your Account</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Input 
-          placeholder="Your name" 
+        <Input
+          placeholder="Your name"
           value={userData.name}
           onChange={(e) => setUserData(prev => ({ ...prev, name: e.target.value }))}
         />
-        <Input 
-          type="email" 
-          placeholder="Email" 
+        <Input
+          type="email"
+          placeholder="Email"
           value={userData.email}
-          onChange={(e) => setUserData(prev => ({ ...prev, email: e.target.value }))}
+          onChange={(e) => {
+            setUserData(prev => ({ ...prev, email: e.target.value }));
+            setEmailError(null); // 清除错误
+          }}
+          className={emailError ? "border-red-500" : ""}
         />
-        <Input 
-          type="password" 
-          placeholder="Password" 
+        {emailError && <p className="text-red-500 text-sm mt-1">{emailError}</p>}
+        <Input
+          type="password"
+          placeholder="Password"
           value={userData.password}
-          onChange={(e) => setUserData(prev => ({ ...prev, password: e.target.value }))}
+          onChange={(e) => {
+            setUserData(prev => ({ ...prev, password: e.target.value }));
+            setPasswordError(null); // 清除错误
+          }}
+          className={passwordError ? "border-red-500" : ""}
         />
-        <Button 
-          onClick={() => setStep(1)} 
+        {passwordError && <p className="text-red-500 text-sm mt-1">{passwordError}</p>}
+        <Button
+          onClick={handleContinueToAvatar}
           className="w-full"
-          disabled={!userData.name || !userData.email || !userData.password}
+          disabled={
+            creating ||
+            !userData.name ||
+            !userData.email ||
+            !userData.password
+          }
         >
-          Continue
+          {creating ? "Creating..." : "Continue"}
         </Button>
       </CardContent>
     </Card>,
@@ -185,8 +284,8 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex justify-center mb-4">
-          <Avatar 
-            mood={userData.avatar.mood} 
+          <Avatar
+            mood={userData.avatar.mood}
             accessories={userData.avatar.accessories}
             size="lg"
           />
@@ -199,12 +298,11 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                 <button
                   key={mood}
                   onClick={() => setUserData(prev => ({
-                    ...prev, 
+                    ...prev,
                     avatar: { ...prev.avatar, mood }
                   }))}
-                  className={`p-2 rounded-lg border-2 ${
-                    userData.avatar.mood === mood ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                  }`}
+                  className={`p-2 rounded-lg border-2 ${userData.avatar.mood === mood ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    }`}
                 >
                   <Avatar mood={mood} size="sm" />
                 </button>
@@ -231,21 +329,21 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         <p className="text-sm text-gray-600">Optional: Add a trusted contact for emergency situations</p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Input 
-          placeholder="Phone number (optional)" 
+        <Input
+          placeholder="Phone number (optional)"
           value={userData.trustedContact}
           onChange={(e) => setUserData(prev => ({ ...prev, trustedContact: e.target.value }))}
         />
         <div className="space-y-2">
-          <Button 
-            onClick={() => handleSignup(userData)} 
+          <Button
+            onClick={() => handleSignup(userData)}
             className="w-full bg-blue-600 hover:bg-blue-700"
           >
             Complete Setup
           </Button>
-          <Button 
-            variant="ghost" 
-            onClick={() => handleSignup(userData)} 
+          <Button
+            variant="ghost"
+            onClick={() => handleSignup(userData)}
             className="w-full"
           >
             Skip for now
