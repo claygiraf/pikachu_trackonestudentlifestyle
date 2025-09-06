@@ -9,9 +9,10 @@ interface MoodTrackerProps {
   user: any;
   onMoodLogged: (mood: string, note: string) => void;
   onBack?: () => void;
+  onNeedHelp?: () => void;
 }
 
-export function MoodTracker({ user, onMoodLogged, onBack }: MoodTrackerProps) {
+export function MoodTracker({ user, onMoodLogged, onBack, onNeedHelp }: MoodTrackerProps) {
   const [selectedMood, setSelectedMood] = useState<string>('');
   const [note, setNote] = useState('');
   const [showChart, setShowChart] = useState(false);
@@ -25,22 +26,23 @@ export function MoodTracker({ user, onMoodLogged, onBack }: MoodTrackerProps) {
     { id: 'stressed', emoji: '😤', label: 'Stressed', value: 1 },
   ];
 
-  // Mock data for the past 7 days
   const moodData = [
-    { day: 'Mon', mood: 4 },
-    { day: 'Tue', mood: 3 },
-    { day: 'Wed', mood: 5 },
+    { day: 'Mon', mood: 1 },
+    { day: 'Tue', mood: 2 },
+    { day: 'Wed', mood: 4 },
     { day: 'Thu', mood: 2 },
-    { day: 'Fri', mood: 4 },
-    { day: 'Sat', mood: 5 },
+    { day: 'Fri', mood: 1 },
+    { day: 'Sat', mood: 1 },
     { day: 'Sun', mood: 4 },
   ];
+
+  const negativeDays = moodData.filter(d => d.mood <= 2).length;
+  const showHelpPrompt = negativeDays >= 5;
 
   const handleMoodSubmit = () => {
     if (selectedMood) {
       onMoodLogged(selectedMood, note);
       
-      // Show supportive message
       const mood = moods.find(m => m.id === selectedMood);
       let message = "Thanks for checking in with yourself! 💙";
       
@@ -164,6 +166,21 @@ export function MoodTracker({ user, onMoodLogged, onBack }: MoodTrackerProps) {
                   Keep tracking to see patterns and celebrate progress! 📈
                 </p>
               </div>
+
+              {/* Emergency Suggestion */}
+              {showHelpPrompt && (
+                <div className="mt-6 text-center">
+                  <p className="text-blue-600 font-semibold mb-3">
+                    We noticed several tough days 💔 Remember, you are not alone.
+                  </p>
+                  <Button 
+                    className="bg-red-500 hover:bg-red-600 text-white"
+                    onClick={() => onNeedHelp && onNeedHelp()}   // ✅ safe call
+                  >
+                    I Need Help
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

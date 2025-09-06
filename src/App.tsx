@@ -151,27 +151,41 @@ export default function App() {
   };
 
   const renderCurrentPage = () => {
-    switch (currentPage) {
-      case 'home':
-        return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} />;
-      case 'mood':
-        return <MoodTracker user={user} onMoodLogged={handleMoodLogged} onBack={handleBackToHome} />;
-      case 'chat':
-        return <AIChat user={user} onEmergencyTrigger={handleEmergencyTrigger} onBack={handleBackToHome} />;
-      case 'goals':
-        return <GoalsPage user={user} onPointsEarned={handlePointsEarned} onBack={handleBackToHome} />;
-      case 'journal':
-        return <JournalPage user={user} onBack={handleBackToHome} />;
-      case 'profile':
-        return <ProfilePage user={user} onUserUpdate={handleUserUpdate} onBack={handleBackToHome} onLogout={handleLogout} />;
-      default:
-        return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} />;
-    }
-  };
+  switch (currentPage) {
+    case 'home':
+      return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} />;
+
+    case 'mood':
+      return (
+        <MoodTracker 
+          user={user} 
+          onMoodLogged={handleMoodLogged} 
+          onBack={handleBackToHome} 
+          onNeedHelp={handleEmergencyTrigger} // ✅ Add this line
+        />
+      );
+
+    case 'chat':
+      return <AIChat user={user} onEmergencyTrigger={handleEmergencyTrigger} onBack={handleBackToHome} />;
+
+    case 'goals':
+      return <GoalsPage user={user} onPointsEarned={handlePointsEarned} onBack={handleBackToHome} />;
+
+    case 'journal':
+      return <JournalPage user={user} onBack={handleBackToHome} />;
+
+    case 'profile':
+      return <ProfilePage user={user} onUserUpdate={handleUserUpdate} onBack={handleBackToHome} onLogout={handleLogout} />;
+
+    default:
+      return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} />;
+  }
+};
 
   return (
     <div className="relative min-h-screen bg-gray-50 overflow-hidden">
       {renderCurrentPage()}
     </div>
   );
+  
 }
