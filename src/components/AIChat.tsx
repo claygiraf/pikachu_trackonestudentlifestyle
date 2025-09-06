@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -31,7 +31,7 @@ export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const emergencyKeywords = [
-    'want to die', 'kill myself', 'end it all', 'self harm', 'suicide', 
+    'want to die', 'kill myself', 'self harm', 'suicide', 
     'hurt myself', 'not worth living', 'better off dead'
   ];
 
