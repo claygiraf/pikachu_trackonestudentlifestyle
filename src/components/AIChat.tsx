@@ -18,17 +18,17 @@ interface Message {
 }
 
 export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState([
     {
       id: '1',
       type: 'ai',
       content: `Hi ${user?.name || 'friend'}! 💙 I'm here to listen and support you. How are you feeling today?`,
       timestamp: new Date()
     }
-  ]);
+  ] as Message[]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef(null);
 
   const emergencyKeywords = [
     'want to die', 'kill myself', 'self harm', 'suicide', 
@@ -48,79 +48,66 @@ export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
     return emergencyKeywords.some(keyword => lowerText.includes(keyword));
   };
 
-  const generateAIResponse = (userMessage: string) => {
-    const lowerMessage = userMessage.toLowerCase();
-    
-    // Emergency response
-    if (checkForEmergency(userMessage)) {
-      setTimeout(() => onEmergencyTrigger(), 1000);
-      return "I'm really concerned about you right now. 💙 Your life has value and you matter. Let me help you find some immediate support.";
-    }
-    
-    // Mood-based responses
-    if (lowerMessage.includes('sad') || lowerMessage.includes('down') || lowerMessage.includes('depressed')) {
-      return "I hear that you're going through a tough time. 💙 It's okay to feel sad - your feelings are valid. What's one small thing that usually brings you a bit of comfort?";
-    }
-    
-    if (lowerMessage.includes('anxious') || lowerMessage.includes('worried') || lowerMessage.includes('scared')) {
-      return "Anxiety can feel overwhelming. Let's try to slow things down. 🌸 Try taking three deep breaths with me. In for 4... hold for 4... out for 6. You're safe right now.";
-    }
-    
-    if (lowerMessage.includes('happy') || lowerMessage.includes('good') || lowerMessage.includes('great')) {
-      return "I'm so glad to hear you're feeling positive today! ✨ What's bringing you joy right now? It's wonderful to celebrate these moments.";
-    }
-    
-    if (lowerMessage.includes('stressed') || lowerMessage.includes('overwhelmed')) {
-      return "Feeling overwhelmed is tough. 💙 Let's break things down. What's the one most important thing you need to focus on right now? We can tackle this together.";
-    }
-    
-    // Default supportive responses
-    const responses = [
-      "Thank you for sharing that with me. 💙 How are you taking care of yourself today?",
-      "I'm here to listen. What's on your mind right now? 🌸",
-      "That sounds important to you. Tell me more about how you're feeling about it.",
-      "You're being really brave by talking about this. 💙 What kind of support would feel helpful right now?",
-      "I appreciate you opening up. What's one thing that's going well for you today, even if it's small? 🌟"
-    ];
-    
-    return responses[Math.floor(Math.random() * responses.length)];
+  const generateAIResponse = async (userMessage: string) => {
+  // Emergency check (keep this!)
+  if (checkForEmergency(userMessage)) {
+    setTimeout(() => onEmergencyTrigger(), 500);
+    return "⚠️ I'm really concerned about you right now. 💙 Your life has value and you matter. Please reach out for immediate support.";
+  }
+
+  try {
+    const res = await fetch("http://localhost:5000/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: userMessage }),
+    });
+
+    const data = await res.json();
+    return data.reply || "Sorry, I couldn’t understand that.";
+  } catch (err) {
+    console.error("Error calling AI:", err);
+    return "⚠️ Something went wrong. Please try again later.";
+  }
+};
+
+
+  const handleSendMessage = async () => {
+  if (!inputText.trim()) return;
+
+  const newUserMessage: Message = {
+    id: Date.now().toString(),
+    type: "user",
+    content: inputText,
+    timestamp: new Date(),
   };
 
-  const handleSendMessage = () => {
-    if (!inputText.trim()) return;
+  setMessages((prev) => [...prev, newUserMessage]);
+  setInputText("");
+  setIsTyping(true);
 
-    const newUserMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: inputText,
-      timestamp: new Date()
-    };
+  // Call LLM
+  const aiReply = await generateAIResponse(newUserMessage.content);
 
-    setMessages(prev => [...prev, newUserMessage]);
-    setInputText('');
-    setIsTyping(true);
-
-    // Simulate AI typing delay
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        content: generateAIResponse(inputText),
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, aiResponse]);
-      setIsTyping(false);
-    }, 1500);
+  const aiResponse: Message = {
+    id: (Date.now() + 1).toString(),
+    type: "ai",
+    content: aiReply,
+    timestamp: new Date(),
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
+  setMessages((prev) => [...prev, aiResponse]);
+  setIsTyping(false);
+};
 
+
+  // ...existing code...
+const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    handleSendMessage();
+  }
+};
+// ...existing code...
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
       
@@ -200,7 +187,7 @@ export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
           <Input
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             placeholder="Type your message..."
             className="flex-1"
           />
