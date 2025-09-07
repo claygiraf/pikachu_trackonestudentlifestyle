@@ -3,6 +3,7 @@ import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Send, Bot, User, AlertTriangle, ArrowLeft } from "lucide-react";
+import { genAI } from "../gemini"; // Import Gemini AI
 
 interface AIChatProps {
   user: any;
@@ -28,7 +29,7 @@ export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
   ] as Message[]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null); // Specify the type for useRef
 
   const emergencyKeywords = [
     'want to die', 'kill myself', 'self harm', 'suicide', 
@@ -49,55 +50,70 @@ export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
   };
 
   const generateAIResponse = async (userMessage: string) => {
-  // Emergency check (keep this!)
-  if (checkForEmergency(userMessage)) {
-    setTimeout(() => onEmergencyTrigger(), 500);
-    return "⚠️ I'm really concerned about you right now. 💙 Your life has value and you matter. Please reach out for immediate support.";
-  }
+    // Emergency check (keep this!)
+    if (checkForEmergency(userMessage)) {
+      setTimeout(() => onEmergencyTrigger(), 500);
+      return "⚠️ I'm really concerned about you right now. 💙 Your life has value and you matter. Please reach out for immediate support.";
+    }
 
-  try {
-    const res = await fetch("http://localhost:5000/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: userMessage }),
-    });
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
+      
+      // Filter out the initial AI welcome message if it's the first message in history
+      // Gemini API requires chat history to start with a 'user' role.
+      const filteredHistory = messages.filter((_, index) => index > 0).map(msg => ({
+        role: msg.type === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.content }],
+      }));
 
-    const data = await res.json();
-    return data.reply || "Sorry, I couldn’t understand that.";
-  } catch (err) {
-    console.error("Error calling AI:", err);
-    return "⚠️ Something went wrong. Please try again later.";
-  }
-};
+      const chat = model.startChat({
+        history: filteredHistory,
+        generationConfig: {
+          maxOutputTokens: 500,
+        },
+      });
 
+      const prompt = `You are a compassionate mental health support agent. Your goal is to provide empathetic listening, support, and helpful advice to users. Keep your responses concise and supportive.
+      
+      User message: "${userMessage}"`;
+
+      const result = await chat.sendMessage(prompt);
+      const response = await result.response;
+      const text = response.text();
+      return text || "Sorry, I couldn’t understand that.";
+    } catch (err) {
+      console.error("Error calling Gemini AI:", err);
+      return "⚠️ Something went wrong. Please try again later.";
+    }
+  };
 
   const handleSendMessage = async () => {
-  if (!inputText.trim()) return;
+    if (!inputText.trim()) return;
 
-  const newUserMessage: Message = {
-    id: Date.now().toString(),
-    type: "user",
-    content: inputText,
-    timestamp: new Date(),
+    const newUserMessage: Message = {
+      id: Date.now().toString(),
+      type: "user",
+      content: inputText,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, newUserMessage]);
+    setInputText("");
+    setIsTyping(true);
+
+    // Call LLM
+    const aiReply = await generateAIResponse(newUserMessage.content);
+
+    const aiResponse: Message = {
+      id: (Date.now() + 1).toString(),
+      type: "ai",
+      content: aiReply,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, aiResponse]);
+    setIsTyping(false);
   };
-
-  setMessages((prev) => [...prev, newUserMessage]);
-  setInputText("");
-  setIsTyping(true);
-
-  // Call LLM
-  const aiReply = await generateAIResponse(newUserMessage.content);
-
-  const aiResponse: Message = {
-    id: (Date.now() + 1).toString(),
-    type: "ai",
-    content: aiReply,
-    timestamp: new Date(),
-  };
-
-  setMessages((prev) => [...prev, aiResponse]);
-  setIsTyping(false);
-};
 
 
   // ...existing code...
