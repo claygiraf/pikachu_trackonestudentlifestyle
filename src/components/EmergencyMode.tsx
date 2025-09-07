@@ -1,3 +1,4 @@
+//Emergency Mode.
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -50,6 +51,7 @@ export function EmergencyMode({ user, onBack }: EmergencyModeProps) {
   ];
 
   const affirmations = [
+    "Hey, just take some rest",
     "I am safe right now in this moment",
     "This feeling will pass, just like clouds in the sky",
     "I am stronger than I know",

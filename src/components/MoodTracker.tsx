@@ -1,3 +1,4 @@
+//Mood tracker.
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -175,7 +176,7 @@ export function MoodTracker({ user, onMoodLogged, onBack, onNeedHelp }: MoodTrac
                   </p>
                   <Button 
                     className="bg-red-500 hover:bg-red-600 text-white"
-                    onClick={() => onNeedHelp && onNeedHelp()}   // ✅ safe call
+                    onClick={() => onNeedHelp && onNeedHelp()}   
                   >
                     I Need Help
                   </Button>
