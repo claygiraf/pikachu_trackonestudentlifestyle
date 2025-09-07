@@ -4,11 +4,15 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Send, Bot, User, AlertTriangle, ArrowLeft } from "lucide-react";
 import { genAI } from "../gemini"; // Import Gemini AI
+import { db } from "../firebase"; // Import Firestore db
+import { doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore"; // Import Firestore functions
+import { moods } from "./MoodTracker"; // Import moods from MoodTracker
 
 interface AIChatProps {
   user: any;
   onEmergencyTrigger: () => void;
   onBack?: () => void;
+  currentMood?: string; // Add currentMood prop
 }
 
 interface Message {
@@ -18,18 +22,50 @@ interface Message {
   timestamp: Date;
 }
 
-export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
-  const [messages, setMessages] = useState([
-    {
-      id: '1',
-      type: 'ai',
-      content: `Hi ${user?.name || 'friend'}! 💙 I'm here to listen and support you. How are you feeling today?`,
-      timestamp: new Date()
-    }
-  ] as Message[]);
+export function AIChat({ user, onEmergencyTrigger, onBack, currentMood }: AIChatProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null); // Specify the type for useRef
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchChatHistory();
+    }
+  }, [user?.uid]);
+
+  const fetchChatHistory = async () => {
+    const userDocRef = doc(db, "users", user.uid);
+    const userDocSnap = await getDoc(userDocRef);
+    if (userDocSnap.exists()) {
+      const chatHistory = userDocSnap.data().chatHistory || [];
+      setMessages(chatHistory.map((msg: any) => ({
+        ...msg,
+        timestamp: msg.timestamp.toDate(), // Convert Firestore Timestamp to Date
+      })));
+    } else {
+      // If no history, add initial AI message
+      setMessages([
+        {
+          id: '1',
+          type: 'ai',
+          content: `Hi ${user?.name || 'friend'}! 💙 I'm here to listen and support you. How are you feeling today?`,
+          timestamp: new Date()
+        }
+      ]);
+    }
+  };
+
+  const saveChatHistory = async (newMessages: Message[]) => {
+    if (!user?.uid) return;
+    const userDocRef = doc(db, "users", user.uid);
+    await updateDoc(userDocRef, {
+      chatHistory: newMessages.map(msg => ({
+        ...msg,
+        timestamp: msg.timestamp, // Firestore will handle Date objects
+      })),
+    });
+  };
 
   const emergencyKeywords = [
     'want to die', 'kill myself', 'self harm', 'suicide', 
@@ -49,6 +85,11 @@ export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
     return emergencyKeywords.some(keyword => lowerText.includes(keyword));
   };
 
+  const getMoodEmoji = (moodId: string) => {
+    const mood = moods.find(m => m.id === moodId);
+    return mood ? mood.emoji : '';
+  };
+
   const generateAIResponse = async (userMessage: string) => {
     // Emergency check (keep this!)
     if (checkForEmergency(userMessage)) {
@@ -58,22 +99,25 @@ export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
 
     try {
       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
-      
-      // Filter out the initial AI welcome message if it's the first message in history
-      // Gemini API requires chat history to start with a 'user' role.
-      const filteredHistory = messages.filter((_, index) => index > 0).map(msg => ({
+
+      // Prepare chat history for Gemini
+      const geminiHistory = messages.map(msg => ({
         role: msg.type === 'user' ? 'user' : 'model',
         parts: [{ text: msg.content }],
       }));
 
       const chat = model.startChat({
-        history: filteredHistory,
+        history: geminiHistory,
         generationConfig: {
           maxOutputTokens: 500,
         },
       });
 
+      const moodContext = currentMood ? `The user's current mood is ${currentMood} ${getMoodEmoji(currentMood)}.` : '';
+
       const prompt = `You are a compassionate mental health support agent. Your goal is to provide empathetic listening, support, and helpful advice to users. Keep your responses concise and supportive.
+      ${moodContext}
+      Based on the user's current mood and past conversation, respond empathetically. If the user is stressed or anxious, suggest a breathing exercise or a calming thought. If they are happy, give encouraging feedback.
       
       User message: "${userMessage}"`;
 
@@ -97,9 +141,13 @@ export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, newUserMessage]);
+    const updatedMessages = [...messages, newUserMessage];
+    setMessages(updatedMessages);
     setInputText("");
     setIsTyping(true);
+
+    // Save user message to history
+    await saveChatHistory(updatedMessages);
 
     // Call LLM
     const aiReply = await generateAIResponse(newUserMessage.content);
@@ -111,8 +159,12 @@ export function AIChat({ user, onEmergencyTrigger, onBack }: AIChatProps) {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, aiResponse]);
+    const finalMessages = [...updatedMessages, aiResponse];
+    setMessages(finalMessages);
     setIsTyping(false);
+
+    // Save AI response to history
+    await saveChatHistory(finalMessages);
   };
 
 

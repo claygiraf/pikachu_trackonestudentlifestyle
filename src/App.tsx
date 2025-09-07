@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Toaster } from 'sonner';
 import { OnboardingFlow } from "./components/OnboardingFlow";
+import { LottieAvatarProps } from "./components/LottieAvatar"; // Import LottieAvatarProps
 import { MobileHomePage } from "./components/MobileHomePage";
 import { AvatarCustomization } from "./components/AvatarCustomization";
 import { MoodTracker } from "./components/MoodTracker";
@@ -275,7 +276,7 @@ export default function App() {
           />
         );
       case 'chat':
-        return <AIChat user={user} onEmergencyTrigger={handleEmergencyTrigger} onBack={handleBackToHome} />;
+        return <AIChat user={user} onEmergencyTrigger={handleEmergencyTrigger} onBack={handleBackToHome} currentMood={user.currentMood} />;
       case 'goals':
         return <GoalsPage user={user} onPointsEarned={handlePointsEarned} onBack={handleBackToHome} />;
       case 'journal':
