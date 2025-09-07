@@ -154,14 +154,14 @@ export default function App() {
   switch (currentPage) {
     case 'home':
       return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} />;
-
+    //Mood tracker interact with emergency mode.
     case 'mood':
       return (
         <MoodTracker 
           user={user} 
           onMoodLogged={handleMoodLogged} 
           onBack={handleBackToHome} 
-          onNeedHelp={handleEmergencyTrigger} // ✅ Add this line
+          onNeedHelp={handleEmergencyTrigger} 
         />
       );
 
