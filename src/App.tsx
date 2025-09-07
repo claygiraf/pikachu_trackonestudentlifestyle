@@ -266,7 +266,14 @@ export default function App() {
       case 'home':
         return <MobileHomePage user={user} onNavigate={handleNavigation} onAvatarClick={handleAvatarCustomization} overlayGifs={currentOverlayGifs} mood={user.currentMood} />;
       case 'mood':
-        return <MoodTracker user={user} onMoodLogged={handleMoodLogged} onBack={handleBackToHome} />;
+        return (
+          <MoodTracker
+            user={user}
+            onMoodLogged={handleMoodLogged}
+            onBack={handleBackToHome}
+            onNeedHelp={handleEmergencyTrigger}
+          />
+        );
       case 'chat':
         return <AIChat user={user} onEmergencyTrigger={handleEmergencyTrigger} onBack={handleBackToHome} />;
       case 'goals':
@@ -286,4 +293,5 @@ export default function App() {
       <Toaster/>
     </div>
   );
+  
 }
